@@ -8,7 +8,7 @@ import { DTRRecord } from '@/lib/database'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { TrendingUp, Calendar, ExternalLink, Edit2, Save, LogOut } from 'lucide-react'
+import { TrendingUp, Calendar, ExternalLink, Edit2, Save, LogOut, Menu, X } from 'lucide-react'
 
 export default function DashboardPage() {
   const { user, logout, refreshUser } = useAuth()
@@ -22,6 +22,7 @@ export default function DashboardPage() {
   const [afternoonTimeOut, setAfternoonTimeOut] = useState('')
   const [isEditingTarget, setIsEditingTarget] = useState(false)
   const [targetHours, setTargetHours] = useState(user?.ojt_hours_required || 0)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const fetchDTRRecords = useCallback(async () => {
     if (!user) return
@@ -174,22 +175,87 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-gray-50">
+      {/* Navigation Header */}
+      <nav className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            {/* Logo/Title */}
+            <div className="shrink-0">
+              <h1 className="text-xl font-bold text-gray-900">JLG Dev Solutions DTR TRACKER</h1>
+            </div>
+            
+            {/* Desktop Navigation */}
+            <div className="hidden md:flex items-center space-x-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.open('https://jlgdev.vercel.app', '_blank')}
+                className="flex items-center gap-2"
+              >
+                <ExternalLink className="h-4 w-4" />
+                Visit My Site
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={logout}
+                className="flex items-center gap-2"
+              >
+                <LogOut className="h-4 w-4" />
+                Logout
+              </Button>
+            </div>
+            
+            {/* Mobile menu button */}
+            <div className="md:hidden">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="p-2"
+              >
+                {mobileMenuOpen ? (
+                  <X className="h-6 w-6" />
+                ) : (
+                  <Menu className="h-6 w-6" />
+                )}
+              </Button>
+            </div>
+          </div>
+          
+          {/* Mobile Navigation */}
+          {mobileMenuOpen && (
+            <div className="md:hidden py-2 border-t">
+              <div className="flex flex-col space-y-2 pt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.open('https://jlgdev.vercel.app', '_blank')}
+                  className="flex items-center justify-center gap-2 w-full"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  Visit My Site
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={logout}
+                  className="flex items-center justify-center gap-2 w-full"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Logout
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </nav>
+
       <div className="container mx-auto px-4 py-8">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-          <div>
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 dark:text-gray-100">JLG Dev Solutions DTR TRACKER</h1>
-            <p className="text-gray-600 dark:text-gray-400">Welcome back, {user.full_name}!</p>
-          </div>
-          <div className="flex items-center gap-4">
-            <Button onClick={() => window.open('https://jlgdev.vercel.app', '_blank')} variant="outline">
-              <ExternalLink className="w-4 h-4 mr-2" />
-              Visit my Site
-            </Button>
-            <Button onClick={logout} variant="outline">
-              Logout
-            </Button>
-          </div>
+        <div className="mb-8">
+          <h2 className="text-xl font-semibold text-gray-900">Welcome back, {user.full_name}!</h2>
+          <p className="text-gray-600">Track your OJT hours and manage your daily time records</p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6 mb-8">
