@@ -15,6 +15,7 @@ export interface DTRRecord {
   time_out: string | null
   total_hours: number
   description: string
+  shift_type: 'morning' | 'afternoon' | 'regular'
   created_at: string
   updated_at: string
 }

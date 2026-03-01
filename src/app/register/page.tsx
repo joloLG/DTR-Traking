@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { useAuth } from '@/contexts/auth-context'
+import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -18,9 +18,35 @@ export default function RegisterPage() {
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [user, setUser] = useState(null)
   
-  const { register } = useAuth()
   const router = useRouter()
+
+  useEffect(() => {
+    // Check if user is already logged in
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        router.push('/dashboard')
+      }
+    }
+    
+    checkSession()
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (session) {
+          if (event === 'SIGNED_IN') {
+            router.push('/dashboard')
+          }
+        } else {
+          setUser(null)
+        }
+      }
+    )
+
+    return () => subscription.unsubscribe()
+  }, [router])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -51,24 +77,45 @@ export default function RegisterPage() {
     setLoading(true)
     setError('')
 
-    const { error } = await register(
-      formData.email,
-      formData.password,
-      formData.fullName,
-      ojtHours
-    )
+    const { data, error } = await supabase.auth.signUp({
+      email: formData.email,
+      password: formData.password,
+    })
     
     if (error) {
-      setError((error as any)?.message || 'Registration failed')
-    } else {
-      router.push('/dashboard')
+      setError(error.message || 'Registration failed')
+      setLoading(false)
+    } else if (data.user) {
+      // Add user profile
+      const { error: profileError } = await supabase
+        .from('users')
+        .insert({
+          id: data.user.id,
+          email: formData.email,
+          full_name: formData.fullName,
+          ojt_hours_required: ojtHours,
+          ojt_hours_completed: 0,
+        })
+
+      if (profileError) {
+        // If profile insertion fails, clean up the auth user
+        await supabase.auth.signOut()
+        setError(profileError.message || 'Failed to create user profile')
+        setLoading(false)
+      } else {
+        // Navigation will be handled by onAuthStateChange
+      }
     }
     
     setLoading(false)
   }
 
+  if (user) {
+    return null // Will redirect via useEffect
+  }
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-900 via-red-800 to-red-950">
+    <div className="min-h-screen bg-linear-to-br from-red-50 to-red-100 dark:from-red-950 dark:to-red-900 flex items-center justify-center p-4">
       <Card className="w-full max-w-md rounded-2xl shadow-2xl backdrop-blur-sm bg-white/95 transition-all duration-500 ease-in-out transform hover:scale-105 animate-fadeIn">
         <CardHeader className="text-center space-y-4 animate-slideDown">
           <div className="flex justify-center mb-4 animate-pulse">
@@ -158,7 +205,7 @@ export default function RegisterPage() {
             </div>
 
             {error && (
-              <div className="text-red-600 dark:text-red-400 text-sm">{(error as any)?.message || error}</div>
+              <div className="text-red-600 dark:text-red-400 text-sm">{error}</div>
             )}
 
             <Button type="submit" className="w-full" disabled={loading}>

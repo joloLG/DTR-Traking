@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { useAuth } from '@/contexts/auth-context'
+import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -13,9 +13,43 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [user, setUser] = useState(null)
   
-  const { login } = useAuth()
   const router = useRouter()
+
+  useEffect(() => {
+    // Check if user is already logged in
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        router.push('/dashboard')
+      }
+    }
+    
+    checkSession()
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (session) {
+          // Fetch user profile
+          const { data } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', session.user.id)
+            .single()
+          
+          setUser(data)
+          if (event === 'SIGNED_IN') {
+            router.push('/dashboard')
+          }
+        } else {
+          setUser(null)
+        }
+      }
+    )
+
+    return () => subscription.unsubscribe()
+  }, [router])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -23,19 +57,24 @@ export default function LoginPage() {
     setLoading(true)
     setError('')
 
-    const { error } = await login(email, password)
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
     
     if (error) {
-      setError((error as any)?.message || 'Login failed')
-    } else {
-      router.push('/dashboard')
+      setError(error.message || 'Login failed')
+      setLoading(false)
     }
-    
-    setLoading(false)
+    // Navigation will be handled by onAuthStateChange
+  }
+
+  if (user) {
+    return null // Will redirect via useEffect
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-900 via-red-800 to-red-950">
+    <div className="min-h-screen bg-linear-to-br from-red-50 to-red-100 dark:from-red-950 dark:to-red-900 flex items-center justify-center p-4">
       <Card className="w-full max-w-md rounded-2xl shadow-2xl backdrop-blur-sm bg-white/95 transition-all duration-500 ease-in-out transform hover:scale-105 animate-fadeIn">
         <CardHeader className="text-center space-y-4 animate-slideDown">
           <div className="flex justify-center mb-4 animate-pulse">
@@ -77,7 +116,7 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <div className="text-red-600 dark:text-red-400 text-sm">{(error as any)?.message || error}</div>
+              <div className="text-red-600 dark:text-red-400 text-sm">{error}</div>
             )}
 
             <Button type="submit" className="w-full" disabled={loading}>

@@ -2,27 +2,107 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAuth } from '@/contexts/auth-context'
 import { supabase } from '@/lib/supabase'
 import { DTRRecord } from '@/lib/database'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { TrendingUp, Calendar, ExternalLink, Edit2, Save, LogOut, Menu, X } from 'lucide-react'
+import { Edit2, Save, LogOut, Calendar, TrendingUp, CheckCircle, Globe } from 'lucide-react'
+
+interface User {
+  id: string
+  email: string
+  full_name: string
+  ojt_hours_required: number
+  ojt_hours_completed: number
+  created_at: string
+  updated_at: string
+}
 
 export default function DashboardPage() {
-  const { user, logout, refreshUser } = useAuth()
   const router = useRouter()
+  const [user, setUser] = useState<User | null>(null)
   const [dtrRecords, setDtrRecords] = useState<DTRRecord[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
-  const [morningTimeIn, setMorningTimeIn] = useState('')
-  const [morningTimeOut, setMorningTimeOut] = useState('')
-  const [afternoonTimeIn, setAfternoonTimeIn] = useState('')
-  const [afternoonTimeOut, setAfternoonTimeOut] = useState('')
+  
+  // Helper function to format date in local timezone (YYYY-MM-DD)
+  const formatDateToLocal = (date: Date) => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+  
+  const [selectedDate, setSelectedDate] = useState(formatDateToLocal(new Date()))
+  const [morningTimeIn, setMorningTimeIn] = useState('08:00')
+  const [morningTimeOut, setMorningTimeOut] = useState('12:00')
+  const [afternoonTimeIn, setAfternoonTimeIn] = useState('13:00')
+  const [afternoonTimeOut, setAfternoonTimeOut] = useState('17:00')
   const [isEditingTarget, setIsEditingTarget] = useState(false)
-  const [targetHours, setTargetHours] = useState(user?.ojt_hours_required || 0)
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [targetHours, setTargetHours] = useState(0)
+  const [showSuccessAnimation, setShowSuccessAnimation] = useState(false)
+  const [successMessage, setSuccessMessage] = useState('')
+
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        // Fetch user profile
+        const { data } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', session.user.id)
+          .single()
+        
+        setUser(data)
+        setTargetHours(data?.ojt_hours_required || 0)
+        setLoading(false)
+      } else {
+        router.push('/login')
+      }
+    }
+    
+    checkSession()
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (session) {
+          // Fetch user profile
+          const { data } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', session.user.id)
+            .single()
+          
+          setUser(data)
+          setTargetHours(data?.ojt_hours_required || 0)
+        } else {
+          setUser(null)
+          router.push('/login')
+        }
+      }
+    )
+
+    return () => subscription.unsubscribe()
+  }, [router])
+
+  const logout = async () => {
+    await supabase.auth.signOut()
+    setUser(null)
+    router.push('/login')
+  }
+
+  const refreshUser = async () => {
+    if (user) {
+      const { data } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', user.id)
+        .single()
+      
+      setUser(data)
+    }
+  }
 
   const fetchDTRRecords = useCallback(async () => {
     if (!user) return
@@ -32,8 +112,7 @@ export default function DashboardPage() {
         .from('dtr_records')
         .select('*')
         .eq('user_id', user.id)
-        .order('date', { ascending: false })
-        .limit(10)
+        .order('date', { ascending: true })
 
       if (error) {
         console.error('Error fetching DTR records:', error)
@@ -50,7 +129,7 @@ export default function DashboardPage() {
   const checkTodayStatus = useCallback(async () => {
     if (!user) return
 
-    const today = new Date().toISOString().split('T')[0]
+    const today = formatDateToLocal(new Date())
     
     try {
       const { data } = await supabase
@@ -69,18 +148,48 @@ export default function DashboardPage() {
   }, [user])
 
   useEffect(() => {
-    if (!user) {
+    if (!loading && !user) {
       router.push('/login')
       return
     }
 
-    fetchDTRRecords()
-    checkTodayStatus()
-  }, [user, router, fetchDTRRecords, checkTodayStatus])
+    if (user) {
+      fetchDTRRecords()
+      checkTodayStatus()
+    }
+  }, [user, loading, router, fetchDTRRecords, checkTodayStatus])
 
   const calculateProgress = () => {
     if (!user) return 0
     return Math.min((user.ojt_hours_completed / user.ojt_hours_required) * 100, 100)
+  }
+
+  const calculateEstimatedDays = () => {
+    if (!user) return 0
+    const remainingHours = Math.max(user.ojt_hours_required - user.ojt_hours_completed, 0)
+    const dailyHours = 8 // Assuming 8 hours per workday
+    return Math.ceil(remainingHours / dailyHours)
+  }
+
+  const getDailyHoursForChart = () => {
+    const last7Days = []
+    const today = new Date()
+    
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date(today)
+      date.setDate(date.getDate() - i)
+      const dateStr = formatDateToLocal(date)
+      
+      const dayRecords = dtrRecords.filter(record => record.date === dateStr)
+      const totalHours = dayRecords.reduce((sum, record) => sum + (record.total_hours || 0), 0)
+      
+      last7Days.push({
+        date: date.toLocaleDateString('en', { weekday: 'short' }),
+        hours: totalHours
+      })
+    }
+    
+    return last7Days
   }
 
   const handleUpdateTargetHours = async () => {
@@ -104,12 +213,130 @@ export default function DashboardPage() {
     }
   }
 
+  const handleAddMorningShift = async () => {
+    if (!user || !selectedDate || !morningTimeIn || !morningTimeOut) return
+
+    try {
+      // Check if morning shift already exists for this date
+      const { data: existingRecords } = await supabase
+        .from('dtr_records')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('date', selectedDate)
+        .eq('shift_type', 'morning')
+
+      if (existingRecords && existingRecords.length > 0) {
+        setSuccessMessage('Morning shift already exists for this date!')
+        setShowSuccessAnimation(true)
+        setTimeout(() => {
+          setShowSuccessAnimation(false)
+          setSuccessMessage('')
+        }, 3000)
+        return
+      }
+
+      const { error } = await supabase
+        .from('dtr_records')
+        .insert({
+          user_id: user.id,
+          date: selectedDate,
+          time_in: morningTimeIn,
+          time_out: morningTimeOut,
+          description: 'Morning shift',
+          shift_type: 'morning'
+        })
+
+      if (error) {
+        console.error('Error adding morning record:', error)
+        return
+      }
+
+      // Show success animation
+      setShowSuccessAnimation(true)
+      setTimeout(() => setShowSuccessAnimation(false), 3000)
+      
+      // Reset morning times
+      setMorningTimeIn('08:00')
+      setMorningTimeOut('12:00')
+      
+      // Refresh data
+      fetchDTRRecords()
+      refreshUser()
+    } catch (error) {
+      console.error('Error adding morning DTR record:', error)
+    }
+  }
+
+  const handleAddAfternoonShift = async () => {
+    if (!user || !selectedDate || !afternoonTimeIn || !afternoonTimeOut) return
+
+    try {
+      // Check if afternoon shift already exists for this date
+      const { data: existingRecords } = await supabase
+        .from('dtr_records')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('date', selectedDate)
+        .eq('shift_type', 'afternoon')
+
+      if (existingRecords && existingRecords.length > 0) {
+        setSuccessMessage('Afternoon shift already exists for this date!')
+        setShowSuccessAnimation(true)
+        setTimeout(() => {
+          setShowSuccessAnimation(false)
+          setSuccessMessage('')
+        }, 3000)
+        return
+      }
+
+      const { error } = await supabase
+        .from('dtr_records')
+        .insert({
+          user_id: user.id,
+          date: selectedDate,
+          time_in: afternoonTimeIn,
+          time_out: afternoonTimeOut,
+          description: 'Afternoon shift',
+          shift_type: 'afternoon'
+        })
+
+      if (error) {
+        console.error('Error adding afternoon record:', error)
+        return
+      }
+
+      // Show success animation
+      setShowSuccessAnimation(true)
+      setTimeout(() => setShowSuccessAnimation(false), 3000)
+      
+      // Reset afternoon times
+      setAfternoonTimeIn('13:00')
+      setAfternoonTimeOut('17:00')
+      
+      // Refresh data
+      fetchDTRRecords()
+      refreshUser()
+    } catch (error) {
+      console.error('Error adding afternoon DTR record:', error)
+    }
+  }
+
   const handleAddDTRRecord = async () => {
     if (!user || !selectedDate) return
 
     try {
-      // Add morning record if both times are provided
-      if (morningTimeIn && morningTimeOut) {
+      // Check if records already exist for this date
+      const { data: existingRecords } = await supabase
+        .from('dtr_records')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('date', selectedDate)
+
+      const hasMorningRecord = existingRecords?.some(record => record.shift_type === 'morning')
+      const hasAfternoonRecord = existingRecords?.some(record => record.shift_type === 'afternoon')
+
+      // Add morning record if both times are provided and no morning record exists
+      if (morningTimeIn && morningTimeOut && !hasMorningRecord) {
         const { error: morningError } = await supabase
           .from('dtr_records')
           .insert({
@@ -117,7 +344,8 @@ export default function DashboardPage() {
             date: selectedDate,
             time_in: morningTimeIn,
             time_out: morningTimeOut,
-            description: 'Morning shift'
+            description: 'Morning shift',
+            shift_type: 'morning'
           })
 
         if (morningError) {
@@ -126,8 +354,8 @@ export default function DashboardPage() {
         }
       }
 
-      // Add afternoon record if both times are provided
-      if (afternoonTimeIn && afternoonTimeOut) {
+      // Add afternoon record if both times are provided and no afternoon record exists
+      if (afternoonTimeIn && afternoonTimeOut && !hasAfternoonRecord) {
         const { error: afternoonError } = await supabase
           .from('dtr_records')
           .insert({
@@ -135,7 +363,8 @@ export default function DashboardPage() {
             date: selectedDate,
             time_in: afternoonTimeIn,
             time_out: afternoonTimeOut,
-            description: 'Afternoon shift'
+            description: 'Afternoon shift',
+            shift_type: 'afternoon'
           })
 
         if (afternoonError) {
@@ -144,22 +373,92 @@ export default function DashboardPage() {
         }
       }
 
-      // Clear form
-      setMorningTimeIn('')
-      setMorningTimeOut('')
-      setAfternoonTimeIn('')
-      setAfternoonTimeOut('')
-      
-      // Refresh data
-      fetchDTRRecords()
-      refreshUser()
+      // Show success animation only if at least one record was added
+      if ((morningTimeIn && morningTimeOut && !hasMorningRecord) || 
+          (afternoonTimeIn && afternoonTimeOut && !hasAfternoonRecord)) {
+        setShowSuccessAnimation(true)
+        setTimeout(() => setShowSuccessAnimation(false), 3000)
+        
+        // Reset form to default values
+        setMorningTimeIn('08:00')
+        setMorningTimeOut('12:00')
+        setAfternoonTimeIn('13:00')
+        setAfternoonTimeOut('17:00')
+        
+        // Refresh data
+        fetchDTRRecords()
+        refreshUser()
+      } else {
+        // Show warning if trying to add duplicate records
+        setSuccessMessage('One or both shifts already exist for this date!')
+        setShowSuccessAnimation(true)
+        setTimeout(() => {
+          setShowSuccessAnimation(false)
+          setSuccessMessage('')
+        }, 3000)
+      }
     } catch (error) {
       console.error('Error adding DTR record:', error)
     }
   }
 
+  const getDaysInMonth = (date: Date) => {
+    const year = date.getFullYear()
+    const month = date.getMonth()
+    const firstDay = new Date(year, month, 1)
+    const lastDay = new Date(year, month + 1, 0)
+    return lastDay.getDate()
+  }
+
   const formatTime = (time: string) => {
     return time.substring(0, 5)
+  }
+
+  interface CalendarDay {
+  date: number
+  dateString: string
+  hasRecord: boolean
+  recordCount: number
+  hasSingleShift: boolean
+}
+
+const getRecordsForDate = (dateString: string) => {
+    return dtrRecords.filter(record => record.date === dateString)
+  }
+
+  const generateCalendarDays = (selectedDate: string) => {
+    const date = new Date(selectedDate)
+    const year = date.getFullYear()
+    const month = date.getMonth()
+    const daysInMonth = getDaysInMonth(date)
+    const firstDayOfWeek = new Date(year, month, 1).getDay()
+    
+    const days: (CalendarDay | null)[] = []
+    
+    // Add empty cells for days before month starts
+    for (let i = 0; i < firstDayOfWeek; i++) {
+      days.push(null)
+    }
+    
+    // Add days of the month
+    for (let i = 1; i <= daysInMonth; i++) {
+      // Use local timezone to create date string (YYYY-MM-DD format)
+      const dateString = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`
+      const recordsForDay = getRecordsForDate(dateString)
+      const hasRecord = recordsForDay.length > 0
+      const recordCount = recordsForDay.length
+      const hasSingleShift = recordCount === 1
+      
+      days.push({
+        date: i,
+        dateString,
+        hasRecord,
+        recordCount,
+        hasSingleShift
+      })
+    }
+    
+    return days
   }
 
   if (loading) {
@@ -176,123 +475,52 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Navigation Header */}
-      <nav className="bg-white shadow-sm border-b">
+      {/* Fixed Header Navigation */}
+      <header className="fixed top-0 left-0 right-0 bg-[#800000] text-white shadow-sm border-b z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            {/* Logo/Title */}
+            {/* Left Side - Welcome Message */}
             <div className="shrink-0">
-              <h1 className="text-xl font-bold text-gray-900">JLG Dev Solutions DTR TRACKER</h1>
+              <h1 className="text-lg sm:text-xl lg:text-2xl font-bold text-white">
+                <span className="hidden sm:inline">Welcome to JLG Dev Solutions</span>
+                <span className="sm:hidden">JLG Dev Solutions</span>
+              </h1>
+              <p className="text-xs sm:text-sm text-gray-200">
+                <span className="hidden sm:inline">DTR Tracker System</span>
+                <span className="sm:hidden">DTR System</span>
+              </p>
             </div>
             
-            {/* Desktop Navigation */}
-            <div className="hidden md:flex items-center space-x-4">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => window.open('https://jlgdev.vercel.app', '_blank')}
-                className="flex items-center gap-2"
-              >
-                <ExternalLink className="h-4 w-4" />
-                Visit My Site
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={logout}
-                className="flex items-center gap-2"
-              >
-                <LogOut className="h-4 w-4" />
-                Logout
-              </Button>
-            </div>
-            
-            {/* Mobile menu button */}
-            <div className="md:hidden">
+            {/* Right Side - Logout Button Only */}
+            <div className="flex items-center">
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="p-2"
+                onClick={logout}
+                className="flex items-center gap-2 text-white hover:bg-red-900 text-xs sm:text-sm"
               >
-                {mobileMenuOpen ? (
-                  <X className="h-6 w-6" />
-                ) : (
-                  <Menu className="h-6 w-6" />
-                )}
+                <LogOut className="h-4 w-4" />
+                <span className="hidden xs:inline">Logout</span>
               </Button>
             </div>
           </div>
-          
-          {/* Mobile Navigation */}
-          {mobileMenuOpen && (
-            <div className="md:hidden py-2 border-t">
-              <div className="flex flex-col space-y-2 pt-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => window.open('https://jlgdev.vercel.app', '_blank')}
-                  className="flex items-center justify-center gap-2 w-full"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  Visit My Site
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={logout}
-                  className="flex items-center justify-center gap-2 w-full"
-                >
-                  <LogOut className="h-4 w-4" />
-                  Logout
-                </Button>
-              </div>
-            </div>
-          )}
         </div>
-      </nav>
+      </header>
 
-      <div className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-900">Welcome back, {user.full_name}!</h2>
-          <p className="text-gray-600">Track your OJT hours and manage your daily time records</p>
-        </div>
+      {/* Main Content with padding for fixed header */}
+      <main className="pt-16 pb-16">
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6 mb-8">
+      <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-6 lg:py-8">
+        {/* Progress Metrics */}
+        <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6 mb-4 sm:mb-6 lg:mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">OJT Hours Progress</CardTitle>
+              <CardTitle className="text-sm font-medium">Time Remaining</CardTitle>
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="flex items-center justify-between mb-2">
-                <div className="text-2xl font-bold">
-                  {user.ojt_hours_completed.toFixed(2)} / 
-                  {isEditingTarget ? (
-                    <Input
-                      type="number"
-                      value={targetHours}
-                      onChange={(e) => setTargetHours(parseFloat(e.target.value) || 0)}
-                      className="w-20 h-8 ml-2 inline-block"
-                      min="0"
-                      step="0.5"
-                    />
-                  ) : (
-                    <span onClick={() => setIsEditingTarget(true)} className="cursor-pointer hover:text-blue-600">
-                      {user.ojt_hours_required.toFixed(2)}
-                      <Edit2 className="w-3 h-3 ml-1 inline" />
-                    </span>
-                  )}
-                </div>
-                {isEditingTarget && (
-                  <Button
-                    size="sm"
-                    onClick={handleUpdateTargetHours}
-                    className="ml-2"
-                  >
-                    <Save className="w-3 h-3" />
-                  </Button>
-                )}
+              <div className="text-2xl font-bold">
+                {Math.max(user?.ojt_hours_required - user?.ojt_hours_completed, 0).toFixed(2)} hours
               </div>
               <div className="text-xs text-muted-foreground">
                 {calculateProgress().toFixed(1)}% completed
@@ -308,149 +536,388 @@ export default function DashboardPage() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Today's Status</CardTitle>
-              <Calendar className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Target Hours</CardTitle>
+              <Edit2 className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                Ready to track time
+              <div className="flex items-center justify-between mb-2">
+                {isEditingTarget ? (
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      value={targetHours}
+                      onChange={(e) => setTargetHours(parseFloat(e.target.value) || 0)}
+                      className="w-20 h-8"
+                      min="0"
+                      step="0.5"
+                    />
+                    <Button
+                      size="sm"
+                      onClick={handleUpdateTargetHours}
+                    >
+                      <Save className="w-3 h-3" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div 
+                    onClick={() => setIsEditingTarget(true)} 
+                    className="text-2xl font-bold cursor-pointer hover:text-blue-600 flex items-center gap-2"
+                  >
+                    {user?.ojt_hours_required.toFixed(2)}
+                    <Edit2 className="w-4 h-4" />
+                  </div>
+                )}
               </div>
               <div className="text-xs text-muted-foreground">
-                Add your DTR records manually
+                Click to edit target hours
               </div>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Hours Remaining</CardTitle>
-              <LogOut className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Estimated Days</CardTitle>
+              <Calendar className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {Math.max(user.ojt_hours_required - user.ojt_hours_completed, 0).toFixed(2)}
+                {calculateEstimatedDays()} days
               </div>
               <div className="text-xs text-muted-foreground">
-                hours to complete
+                to complete OJT requirements
               </div>
             </CardContent>
           </Card>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Time Tracking</CardTitle>
-              <CardDescription>
-                Clock in and out for your OJT hours
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Date</label>
-                <Input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  max={new Date().toISOString().split('T')[0]}
-                />
-              </div>
-              
-              <div className="space-y-4">
+        {/* Main Content Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 lg:gap-8">
+          {/* Time Tracking Section */}
+          <div className="space-y-6">
+            {/* Morning Shift */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5" />
+                  Morning Shift
+                </CardTitle>
+                <CardDescription>
+                  Log your morning work hours
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Morning Shift</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <label className="text-xs text-gray-600">Time In</label>
-                      <Input
-                        type="time"
-                        value={morningTimeIn}
-                        onChange={(e) => setMorningTimeIn(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs text-gray-600">Time Out</label>
-                      <Input
-                        type="time"
-                        value={morningTimeOut}
-                        onChange={(e) => setMorningTimeOut(e.target.value)}
-                      />
-                    </div>
+                  <label className="text-sm font-medium">Date</label>
+                  <Input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    max={formatDateToLocal(new Date())}
+                  />
+                </div>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Time In</label>
+                    <Input
+                      type="time"
+                      value={morningTimeIn}
+                      onChange={(e) => setMorningTimeIn(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Time Out</label>
+                    <Input
+                      type="time"
+                      value={morningTimeOut}
+                      onChange={(e) => setMorningTimeOut(e.target.value)}
+                    />
                   </div>
                 </div>
                 
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Afternoon Shift</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <label className="text-xs text-gray-600">Time In</label>
-                      <Input
-                        type="time"
-                        value={afternoonTimeIn}
-                        onChange={(e) => setAfternoonTimeIn(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs text-gray-600">Time Out</label>
-                      <Input
-                        type="time"
-                        value={afternoonTimeOut}
-                        onChange={(e) => setAfternoonTimeOut(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="flex gap-2">
                 <Button 
-                  onClick={handleAddDTRRecord} 
-                  className="flex-1"
-                  disabled={!selectedDate || (!morningTimeIn && !afternoonTimeIn)}
+                  onClick={handleAddMorningShift} 
+                  className="w-full text-sm sm:text-base py-2 sm:py-3"
+                  disabled={!selectedDate || !morningTimeIn || !morningTimeOut}
                 >
                   <Calendar className="w-4 h-4 mr-2" />
-                  Add DTR Record
+                  <span className="hidden xs:inline">Add Morning Shift</span>
+                  <span className="xs:hidden">Add Morning</span>
                 </Button>
+              </CardContent>
+            </Card>
+
+            {/* Afternoon Shift */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5" />
+                  Afternoon Shift
+                </CardTitle>
+                <CardDescription>
+                  Log your afternoon work hours
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Time In</label>
+                    <Input
+                      type="time"
+                      value={afternoonTimeIn}
+                      onChange={(e) => setAfternoonTimeIn(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Time Out</label>
+                    <Input
+                      type="time"
+                      value={afternoonTimeOut}
+                      onChange={(e) => setAfternoonTimeOut(e.target.value)}
+                    />
+                  </div>
+                </div>
+                
+                <Button 
+                  onClick={handleAddAfternoonShift} 
+                  className="w-full text-sm sm:text-base py-2 sm:py-3"
+                  disabled={!selectedDate || !afternoonTimeIn || !afternoonTimeOut}
+                >
+                  <Calendar className="w-4 h-4 mr-2" />
+                  <span className="hidden xs:inline">Add Afternoon Shift</span>
+                  <span className="xs:hidden">Add Afternoon</span>
+                </Button>
+
+                {/* Success Animation */}
+                {showSuccessAnimation && (
+                  <div className="fixed top-20 right-2 sm:top-4 sm:right-4 z-50 animate-slideIn">
+                    <div className={`px-3 sm:px-6 py-2 sm:py-3 rounded-lg shadow-lg flex items-center space-x-2 animate-pulse ${
+                      successMessage.includes('already exists') 
+                        ? 'bg-yellow-500 text-white' 
+                        : 'bg-green-500 text-white'
+                    }`}>
+                      <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5" />
+                      <span className="text-xs sm:text-sm font-medium">
+                        {successMessage || (
+                          <span>
+                            <span className="hidden sm:inline">DTR Record Added Successfully!</span>
+                            <span className="sm:hidden">DTR Added!</span>
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Mobile Bar Graph - Visible on mobile only */}
+          <div className="lg:hidden">
+            <Card>
+              <CardHeader>
+                <CardTitle>Daily Time Tracking</CardTitle>
+                <CardDescription>
+                  Your last 7 days of work hours
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {getDailyHoursForChart().map((day, index) => (
+                    <div key={index} className="flex items-center justify-between">
+                      <span className="text-sm font-medium w-12">{day.date}</span>
+                      <div className="flex-1 mx-2">
+                        <div className="w-full bg-gray-200 rounded-full h-4">
+                          <div 
+                            className="bg-blue-600 h-4 rounded-full" 
+                            style={{ width: `${Math.min((day.hours / 8) * 100, 100)}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                      <span className="text-sm w-8 text-right">{day.hours.toFixed(1)}h</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Calendar View */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Calendar className="h-5 w-5" />
+                Calendar View
+              </CardTitle>
+              <CardDescription>
+                Click on a date to add DTR records
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {/* Month Navigation */}
+                <div className="flex justify-between items-center mb-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const prevMonth = new Date(selectedDate)
+                      prevMonth.setMonth(prevMonth.getMonth() - 1)
+                      setSelectedDate(formatDateToLocal(prevMonth))
+                    }}
+                  >
+                    Previous
+                  </Button>
+                  <div className="text-lg font-semibold">
+                    {new Date(selectedDate).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const nextMonth = new Date(selectedDate)
+                      nextMonth.setMonth(nextMonth.getMonth() + 1)
+                      setSelectedDate(formatDateToLocal(nextMonth))
+                    }}
+                  >
+                    Next
+                  </Button>
+                </div>
+
+                {/* Calendar Grid */}
+                <div className="grid grid-cols-7 gap-1">
+                  {/* Weekday headers */}
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                    <div key={day} className="text-center text-xs font-medium text-gray-600 p-2">
+                      {day}
+                    </div>
+                  ))}
+                  {generateCalendarDays(selectedDate).map((day, index) => {
+                    const recordsForDay = day ? getRecordsForDate(day.dateString) : []
+                    return (
+                      <div
+                        key={index}
+                        className={`
+                          aspect-square 
+                          border 
+                          p-2 
+                          text-center 
+                          text-sm
+                          relative
+                          ${day ? 'cursor-pointer hover:bg-gray-100' : ''}
+                          ${day?.hasSingleShift ? 'bg-red-100 text-red-800 font-bold' : ''}
+                          ${day?.hasRecord && !day?.hasSingleShift ? 'bg-green-100 text-green-800 font-bold' : ''}
+                        `}
+                        onClick={() => {
+                          if (day) {
+                            setSelectedDate(day.dateString)
+                          }
+                        }}
+                        title={day && recordsForDay.length > 0 ? 
+                          `${recordsForDay.length} shift(s):\n${recordsForDay.map(r => `${r.shift_type}: ${formatTime(r.time_in)} - ${r.time_out ? formatTime(r.time_out) : 'Active'}`).join('\n')}` 
+                          : day ? 'Click to select this date' : ''
+                        }
+                      >
+                        {day ? (
+                          <div className={day.hasSingleShift ? 'text-red-600' : day.hasRecord ? 'text-green-600' : 'text-gray-900'}>
+                            {day.date}
+                            {day.hasRecord && (
+                              <div className={`w-1 h-1 rounded-full mx-auto mt-1 ${
+                                day.hasSingleShift ? 'bg-red-500' : 'bg-green-500'
+                              }`}></div>
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Calendar Legend */}
+                <div className="flex items-center justify-center space-x-4 text-xs text-gray-600 mt-2">
+                  <div className="flex items-center space-x-1">
+                    <div className="w-3 h-3 bg-red-100 border border-gray-300 rounded"></div>
+                    <span>Single Shift</span>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <div className="w-3 h-3 bg-green-100 border border-gray-300 rounded"></div>
+                    <span>Complete Day (2+ shifts)</span>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <div className="w-1 h-1 bg-blue-500 rounded-full"></div>
+                    <span>Record Count</span>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Recent DTR Records</CardTitle>
-              <CardDescription>
-                Your latest time records
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {dtrRecords.length === 0 ? (
-                  <p className="text-gray-500 text-sm">No records yet</p>
-                ) : (
-                  dtrRecords.map((record) => (
-                    <div key={record.id} className="border rounded p-3">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="font-medium text-sm">{record.date}</p>
-                          <p className="text-xs text-gray-500">{record.description}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm">
-                            {formatTime(record.time_in)} - {record.time_out ? formatTime(record.time_out) : 'Active'}
-                          </p>
-                          <p className="text-xs font-medium text-green-600">
-                            +{record.total_hours.toFixed(2)} hours
-                          </p>
+          {/* Recent DTR Records */}
+          <div className="lg:col-span-2 md:col-span-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Recent DTR Records</CardTitle>
+                <CardDescription>
+                  Your latest time records
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {dtrRecords.length === 0 ? (
+                    <p className="text-gray-500 text-sm">No records yet</p>
+                  ) : (
+                    dtrRecords.map((record) => (
+                      <div key={record.id} className="border rounded p-3">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="font-medium text-sm">{record.date}</p>
+                            <p className="text-xs text-gray-500">{record.description}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm">
+                              {formatTime(record.time_in)} - {record.time_out ? formatTime(record.time_out) : 'Active'}
+                            </p>
+                            <p className="text-xs font-medium text-green-600">
+                              +{(record.total_hours || 0).toFixed(2)} hours
+                            </p>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </CardContent>
-          </Card>
+                    ))
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
+      </main>
+
+      {/* Fixed Bottom Navigation */}
+      <footer className="fixed bottom-0 left-0 right-0 bg-[#800000] text-white z-40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            {/* Left Side - Copyright */}
+            <div className="text-sm">
+              © JLG-Dev Solutions 2026
+            </div>
+            
+            {/* Right Side - JLG DEV Site Link */}
+            <div className="flex items-center">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => window.open('https://jlgdev.vercel.app', '_blank')}
+                className="flex items-center gap-2 text-white hover:bg-red-900 text-xs sm:text-sm"
+              >
+                <Globe className="h-3 w-3 sm:h-4 sm:w-4" />
+                <span className="hidden sm:inline">JLG DEV Solutions</span>
+                <span className="sm:hidden">JLG DEV</span>
+              </Button>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   )
 }
