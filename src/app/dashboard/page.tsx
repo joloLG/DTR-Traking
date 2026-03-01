@@ -4,35 +4,24 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { DTRRecord } from '@/lib/database'
+import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Edit2, Save, LogOut, Calendar, TrendingUp, CheckCircle, Globe } from 'lucide-react'
 
-interface User {
-  id: string
-  email: string
-  full_name: string
-  ojt_hours_required: number
-  ojt_hours_completed: number
-  created_at: string
-  updated_at: string
+// Helper function to format date in local timezone (YYYY-MM-DD)
+const formatDateToLocal = (date: Date) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 export default function DashboardPage() {
   const router = useRouter()
-  const [user, setUser] = useState<User | null>(null)
+  const { user, loading, logout, refreshUser } = useAuth()
   const [dtrRecords, setDtrRecords] = useState<DTRRecord[]>([])
-  const [loading, setLoading] = useState(true)
-  
-  // Helper function to format date in local timezone (YYYY-MM-DD)
-  const formatDateToLocal = (date: Date) => {
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
-    return `${year}-${month}-${day}`
-  }
-  
   const [selectedDate, setSelectedDate] = useState(formatDateToLocal(new Date()))
   const [morningTimeIn, setMorningTimeIn] = useState('08:00')
   const [morningTimeOut, setMorningTimeOut] = useState('12:00')
@@ -43,65 +32,12 @@ export default function DashboardPage() {
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
 
-  useEffect(() => {
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session) {
-        // Fetch user profile
-        const { data } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.user.id)
-          .single()
-        
-        setUser(data)
-        setTargetHours(data?.ojt_hours_required || 0)
-        setLoading(false)
-      } else {
-        router.push('/login')
-      }
-    }
-    
-    checkSession()
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (session) {
-          // Fetch user profile
-          const { data } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', session.user.id)
-            .single()
-          
-          setUser(data)
-          setTargetHours(data?.ojt_hours_required || 0)
-        } else {
-          setUser(null)
-          router.push('/login')
-        }
-      }
-    )
-
-    return () => subscription.unsubscribe()
-  }, [router])
-
-  const logout = async () => {
-    await supabase.auth.signOut()
-    setUser(null)
-    router.push('/login')
-  }
-
-  const refreshUser = async () => {
-    if (user) {
-      const { data } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', user.id)
-        .single()
-      
-      setUser(data)
-    }
+  // Initialize target hours from user data
+  const targetHoursValue = user ? user.ojt_hours_required || 0 : 0
+  const [initializedTargetHours, setInitializedTargetHours] = useState(false)
+  if (user && !initializedTargetHours) {
+    setTargetHours(targetHoursValue)
+    setInitializedTargetHours(true)
   }
 
   const fetchDTRRecords = useCallback(async () => {
@@ -121,8 +57,6 @@ export default function DashboardPage() {
       }
     } catch (error) {
       console.error('Error fetching DTR records:', error)
-    } finally {
-      setLoading(false)
     }
   }, [user])
 
@@ -152,12 +86,18 @@ export default function DashboardPage() {
       router.push('/login')
       return
     }
+  }, [loading, user, router])
 
+  // Fetch data when user is available
+  useEffect(() => {
     if (user) {
-      fetchDTRRecords()
-      checkTodayStatus()
+      const fetchData = async () => {
+        await fetchDTRRecords()
+        await checkTodayStatus()
+      }
+      fetchData()
     }
-  }, [user, loading, router, fetchDTRRecords, checkTodayStatus])
+  }, [user, fetchDTRRecords, checkTodayStatus])
 
   const calculateProgress = () => {
     if (!user) return 0

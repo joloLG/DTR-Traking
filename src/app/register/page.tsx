@@ -19,6 +19,7 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [user, setUser] = useState(null)
+  const [showPassword, setShowPassword] = useState(false)
   
   const router = useRouter()
 
@@ -129,7 +130,7 @@ export default function RegisterPage() {
         <CardContent className="space-y-4 animate-slideUp">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <label htmlFor="fullName" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              <label htmlFor="fullName" className="text-sm font-medium text-gray-900">
                 Full Name
               </label>
               <Input
@@ -144,7 +145,7 @@ export default function RegisterPage() {
             </div>
 
             <div className="space-y-2">
-              <label htmlFor="email" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              <label htmlFor="email" className="text-sm font-medium text-gray-900">
                 Email
               </label>
               <Input
@@ -159,7 +160,7 @@ export default function RegisterPage() {
             </div>
             
             <div className="space-y-2">
-              <label htmlFor="ojtHoursRequired" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              <label htmlFor="ojtHoursRequired" className="text-sm font-medium text-gray-900">
                 OJT Hours Required
               </label>
               <Input
@@ -175,13 +176,13 @@ export default function RegisterPage() {
             </div>
             
             <div className="space-y-2">
-              <label htmlFor="password" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              <label htmlFor="password" className="text-sm font-medium text-gray-900">
                 Password
               </label>
               <Input
                 id="password"
                 name="password"
-                type="password"
+                type={showPassword ? "text" : "password"}
                 value={formData.password}
                 onChange={handleChange}
                 required
@@ -190,18 +191,31 @@ export default function RegisterPage() {
             </div>
 
             <div className="space-y-2">
-              <label htmlFor="confirmPassword" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              <label htmlFor="confirmPassword" className="text-sm font-medium text-gray-900">
                 Confirm Password
               </label>
               <Input
                 id="confirmPassword"
                 name="confirmPassword"
-                type="password"
+                type={showPassword ? "text" : "password"}
                 value={formData.confirmPassword}
                 onChange={handleChange}
                 required
                 placeholder="Confirm your password"
               />
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="showPassword"
+                checked={showPassword}
+                onChange={(e) => setShowPassword(e.target.checked)}
+                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              />
+              <label htmlFor="showPassword" className="text-sm text-gray-900">
+                Show Password
+              </label>
             </div>
 
             {error && (
