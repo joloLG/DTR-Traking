@@ -31,6 +31,7 @@ export default function DashboardPage() {
   const [targetHours, setTargetHours] = useState(0)
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
 
   // Initialize target hours from user data
   const targetHoursValue = user ? user.ojt_hours_required || 0 : 0
@@ -516,11 +517,13 @@ const getRecordsForDate = (dateString: string) => {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={logout}
-                className="flex items-center gap-2 text-white hover:bg-red-900 text-xs sm:text-sm"
+                onClick={() => setShowLogoutConfirm(true)}
+                disabled={loading}
+                className="flex items-center gap-2 text-white hover:bg-red-900 text-xs sm:text-sm disabled:opacity-50"
               >
-                <LogOut className="h-4 w-4" />
-                <span className="hidden xs:inline">Logout</span>
+                <LogOut className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                <span className="hidden xs:inline">{loading ? 'Logging out...' : 'Logout'}</span>
+                <span className="xs:hidden">{loading ? '...' : 'Out'}</span>
               </Button>
             </div>
           </div>
@@ -965,6 +968,35 @@ const getRecordsForDate = (dateString: string) => {
           </div>
         </div>
       </footer>
+
+      {/* Logout Confirmation Modal */}
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-sm mx-4">
+            <h3 className="text-lg font-semibold mb-4">Confirm Logout</h3>
+            <p className="text-gray-600 mb-6">Are you sure you want to logout? Any unsaved changes will be lost.</p>
+            <div className="flex space-x-3">
+              <Button
+                variant="outline"
+                onClick={() => setShowLogoutConfirm(false)}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  setShowLogoutConfirm(false)
+                  logout()
+                }}
+                className="flex-1 bg-red-600 hover:bg-red-700"
+                disabled={loading}
+              >
+                {loading ? 'Logging out...' : 'Logout'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

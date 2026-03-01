@@ -58,19 +58,31 @@ export function useAuth() {
       setLoading(true)
       setError(null)
       
-      const { error } = await supabase.auth.signOut()
+      // Sign out locally only (clears local session immediately)
+      const { error: localSignOutError } = await supabase.auth.signOut({ scope: 'local' })
       
-      if (error) {
-        console.error('Logout error:', error)
-        setError('Failed to logout')
-        return
+      if (localSignOutError) {
+        console.error('Local logout error:', localSignOutError)
       }
       
+      // Clear user state immediately
       setUser(null)
+      
+      // Force redirect to login page
       router.push('/login')
+      router.refresh()
+      
+      // Also try to sign out from all sessions (optional, in background)
+      supabase.auth.signOut({ scope: 'global' }).catch((err) => {
+        console.log('Global sign out completed (or failed):', err)
+      })
+      
     } catch (err) {
       console.error('Logout error:', err)
       setError('Logout error occurred')
+      // Still try to redirect even if there was an error
+      setUser(null)
+      router.push('/login')
     } finally {
       setLoading(false)
     }
