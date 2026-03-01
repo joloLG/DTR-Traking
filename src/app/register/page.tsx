@@ -10,8 +10,9 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Modal } from '@/components/ui/modal'
 import { useRateLimit } from '@/hooks/use-rate-limit'
+import { Suspense } from 'react'
 
-export default function RegisterPage() {
+function RegisterPageContent() {
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -380,5 +381,57 @@ export default function RegisterPage() {
         </div>
       </Modal>
     </div>
+  )
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-linear-to-br from-red-50 to-red-100 dark:from-red-950 dark:to-red-900 flex items-center justify-center p-4 relative overflow-hidden">
+        {/* Background Watermark for Loading State */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="relative w-full h-full flex items-center justify-center">
+            <div className="absolute inset-0 bg-gradient-to-br from-red-200/20 to-red-300/20 rounded-full blur-3xl scale-150"></div>
+            <div className="relative transform -rotate-12 select-none whitespace-nowrap text-center">
+              <h1 className="font-bold text-transparent bg-clip-text bg-gradient-to-br from-red-300/30 to-red-400/20 tracking-wider leading-tight"
+                  style={{ 
+                    fontFamily: 'system-ui, -apple-system, sans-serif',
+                    fontSize: 'clamp(2rem, 8vw, 6rem)'
+                  }}>
+                JLG DEV
+              </h1>
+              <h1 className="font-bold text-transparent bg-clip-text bg-gradient-to-br from-red-300/25 to-red-400/15 tracking-wider leading-tight -mt-2 sm:-mt-3 md:-mt-4"
+                  style={{ 
+                    fontFamily: 'system-ui, -apple-system, sans-serif',
+                    fontSize: 'clamp(1.5rem, 6vw, 5rem)'
+                  }}>
+                SOLUTIONS
+              </h1>
+              <h1 className="font-bold text-transparent bg-clip-text bg-gradient-to-br from-red-300/20 to-red-400/10 tracking-wider leading-tight -mt-1 sm:-mt-2 md:-mt-3"
+                  style={{ 
+                    fontFamily: 'system-ui, -apple-system, sans-serif',
+                    fontSize: 'clamp(1rem, 5vw, 4rem)'
+                  }}>
+                WORKS
+              </h1>
+            </div>
+          </div>
+        </div>
+        
+        {/* Loading Content */}
+        <div className="relative z-10">
+          <div className="bg-white/70 backdrop-blur-sm rounded-2xl p-8 shadow-2xl text-center max-w-sm mx-auto">
+            <div className="flex justify-center mb-4">
+              <Image src="/images/myLogo.png" alt="Logo" width={64} height={64} className="animate-pulse" />
+            </div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600 mx-auto mb-4"></div>
+            <p className="text-gray-700 font-medium">Preparing registration...</p>
+            <p className="text-gray-500 text-sm mt-2">Please wait a moment</p>
+          </div>
+        </div>
+      </div>
+    }>
+      <RegisterPageContent />
+    </Suspense>
   )
 }
