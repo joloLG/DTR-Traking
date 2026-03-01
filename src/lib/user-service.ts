@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 
 // Service role client for admin operations
-const supabaseService = createClient(
+const supabaseService = process.env.SUPABASE_SERVICE_ROLE_KEY ? createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
   {
@@ -10,7 +10,7 @@ const supabaseService = createClient(
       persistSession: false
     }
   }
-)
+) : null
 
 // Regular client for validation
 const supabase = createClient(
@@ -80,6 +80,13 @@ export async function validateUserData(userData: UserData): Promise<ValidationRe
  */
 export async function createUserAccount(userData: UserData): Promise<CreateUserResult> {
   try {
+    if (!supabaseService) {
+      return {
+        success: false,
+        error: 'Service role key not configured. Please set SUPABASE_SERVICE_ROLE_KEY environment variable.'
+      }
+    }
+
     const { data, error } = await supabaseService.rpc('create_user_account', {
       p_email: userData.email,
       p_full_name: userData.full_name,
@@ -108,6 +115,13 @@ export async function createAdminUser(
   isAdmin: boolean = false
 ): Promise<CreateUserResult> {
   try {
+    if (!supabaseService) {
+      return {
+        success: false,
+        error: 'Service role key not configured. Please set SUPABASE_SERVICE_ROLE_KEY environment variable.'
+      }
+    }
+
     const { data, error } = await supabaseService.rpc('create_admin_user', {
       p_email: userData.email,
       p_full_name: userData.full_name,
@@ -134,6 +148,19 @@ export async function createAdminUser(
  */
 export async function createBulkUsers(users: UserData[]): Promise<BulkUserResult> {
   try {
+    if (!supabaseService) {
+      return {
+        success: false,
+        total_users: users.length,
+        success_count: 0,
+        error_count: users.length,
+        results: users.map(user => ({
+          success: false,
+          error: 'Service role key not configured. Please set SUPABASE_SERVICE_ROLE_KEY environment variable.'
+        }))
+      }
+    }
+
     const { data, error } = await supabaseService.rpc('create_bulk_users', {
       p_users: JSON.stringify(users)
     })
