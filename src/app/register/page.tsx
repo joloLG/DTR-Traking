@@ -274,6 +274,21 @@ export default function RegisterPage() {
               Login here
             </Link>
           </div>
+          
+          {/* Copyright Footer */}
+          <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <p className="text-xs text-center text-gray-500 dark:text-gray-400">
+              © JLG-Dev Solutions 2026 | 
+              <a 
+                href="https://jlgdev.vercel.app" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-blue-600 dark:text-blue-400 hover:underline ml-1"
+              >
+                Visit our website
+              </a>
+            </p>
+          </div>
         </CardContent>
       </Card>
 
