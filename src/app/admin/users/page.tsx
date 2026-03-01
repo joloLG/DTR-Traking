@@ -201,7 +201,9 @@ export default function AdminUsersPage() {
             <CardContent>
               {result.success ? (
                 <div className="space-y-2">
-                  <p className="text-green-700">{result.message || 'Operation completed successfully'}</p>
+                  <p className="text-green-700">
+                    {'message' in result ? result.message : 'Operation completed successfully'}
+                  </p>
                   {'user_id' in result && (
                     <div className="text-sm text-green-600">
                       <p><strong>User ID:</strong> {result.user_id}</p>
@@ -222,7 +224,9 @@ export default function AdminUsersPage() {
                   )}
                 </div>
               ) : (
-                <p className="text-red-700">{result.error}</p>
+                <p className="text-red-700">
+                  {'error' in result ? result.error : 'Unknown error occurred'}
+                </p>
               )}
             </CardContent>
           </Card>
@@ -238,7 +242,7 @@ export default function AdminUsersPage() {
               <h3 className="font-semibold text-gray-900 mb-2">Single User Creation:</h3>
               <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
                 <li>Fill in user details including email, full name, password, and required OJT hours</li>
-                <li>Click "Create User" to register the account</li>
+                <li>Click &quot;Create User&quot; to register the account</li>
                 <li>User will receive confirmation email (if enabled)</li>
               </ul>
             </div>
