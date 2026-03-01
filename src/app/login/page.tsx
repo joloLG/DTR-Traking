@@ -92,8 +92,38 @@ function LoginPageContent() {
   }
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-red-50 to-red-100 dark:from-red-950 dark:to-red-900 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md rounded-2xl shadow-2xl backdrop-blur-sm bg-white/95 transition-all duration-500 ease-in-out transform hover:scale-105 animate-fadeIn">
+    <div className="min-h-screen bg-linear-to-br from-red-50 to-red-100 dark:from-red-950 dark:to-red-900 flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Background Watermark */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="relative w-full h-full flex items-center justify-center">
+          <div className="absolute inset-0 bg-gradient-to-br from-red-200/20 to-red-300/20 rounded-full blur-3xl scale-150"></div>
+          <div className="relative transform -rotate-12 select-none whitespace-nowrap text-center">
+            <h1 className="font-bold text-transparent bg-clip-text bg-gradient-to-br from-red-300/30 to-red-400/20 tracking-wider leading-tight"
+                style={{ 
+                  fontFamily: 'system-ui, -apple-system, sans-serif',
+                  fontSize: 'clamp(2rem, 8vw, 6rem)'
+                }}>
+              JLG DEV
+            </h1>
+            <h1 className="font-bold text-transparent bg-clip-text bg-gradient-to-br from-red-300/25 to-red-400/15 tracking-wider leading-tight -mt-2 sm:-mt-3 md:-mt-4"
+                style={{ 
+                  fontFamily: 'system-ui, -apple-system, sans-serif',
+                  fontSize: 'clamp(1.5rem, 6vw, 5rem)'
+                }}>
+              SOLUTIONS
+            </h1>
+            <h1 className="font-bold text-transparent bg-clip-text bg-gradient-to-br from-red-300/20 to-red-400/10 tracking-wider leading-tight -mt-1 sm:-mt-2 md:-mt-3"
+                style={{ 
+                  fontFamily: 'system-ui, -apple-system, sans-serif',
+                  fontSize: 'clamp(1rem, 5vw, 4rem)'
+                }}>
+              WORKS
+            </h1>
+          </div>
+        </div>
+      </div>
+      
+      <Card className="w-full max-w-md rounded-2xl shadow-2xl backdrop-blur-sm bg-white/95 transition-all duration-500 ease-in-out transform hover:scale-105 animate-fadeIn relative z-10">
         <CardHeader className="text-center space-y-4 animate-slideDown">
           <div className="flex justify-center mb-4 animate-pulse">
             <Image src="/images/myLogo.png" alt="Logo" width={64} height={64} className="transition-transform duration-300 hover:scale-110" />
