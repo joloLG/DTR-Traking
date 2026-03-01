@@ -2,20 +2,37 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAuth } from '@/contexts/auth-context'
+import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { User, Clock, TrendingUp, Calendar, ArrowRight } from 'lucide-react'
 
+interface User {
+  id: string
+  email: string
+  full_name: string
+  ojt_hours_required: number
+  ojt_hours_completed: number
+  created_at: string
+  updated_at: string
+}
+
 export default function UsersPage() {
-  const { user, logout } = useAuth()
   const router = useRouter()
+  const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
   const [recentActivity, setRecentActivity] = useState<Array<{
     description: string
     date: string
     hours: string
     time_range: string
   }>>([])
+
+  const logout = async () => {
+    await supabase.auth.signOut()
+    setUser(null)
+    router.push('/login')
+  }
 
   const fetchRecentActivity = useCallback(async () => {
     if (!user) return
@@ -32,17 +49,68 @@ export default function UsersPage() {
   }, [user])
 
   useEffect(() => {
-    if (!user) {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        // Fetch user profile
+        const { data } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', session.user.id)
+          .single()
+        
+        setUser(data)
+        setLoading(false)
+      } else {
+        router.push('/login')
+      }
+    }
+    
+    checkSession()
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (session) {
+          // Fetch user profile
+          const { data } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', session.user.id)
+            .single()
+          
+          setUser(data)
+        } else {
+          setUser(null)
+          router.push('/login')
+        }
+      }
+    )
+
+    return () => subscription.unsubscribe()
+  }, [router])
+
+  useEffect(() => {
+    if (!loading && !user) {
       router.push('/login')
       return
     }
 
-    const timer = setTimeout(() => {
-      fetchRecentActivity()
-    }, 0)
+    if (user) {
+      const timer = setTimeout(() => {
+        fetchRecentActivity()
+      }, 0)
 
-    return () => clearTimeout(timer)
-  }, [user, router, fetchRecentActivity])
+      return () => clearTimeout(timer)
+    }
+  }, [user, loading, router, fetchRecentActivity])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-lg">Loading...</div>
+      </div>
+    )
+  }
 
   if (!user) {
     return null
