@@ -261,6 +261,86 @@ export default function DashboardPage() {
     }
   }
 
+  const handleAddBothShifts = async () => {
+    if (!user || !selectedDate) return
+
+    try {
+      // Check if records already exist for this date
+      const { data: existingRecords } = await supabase
+        .from('dtr_records')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('date', selectedDate)
+
+      const hasMorningRecord = existingRecords?.some(record => record.shift_type === 'morning')
+      const hasAfternoonRecord = existingRecords?.some(record => record.shift_type === 'afternoon')
+
+      if (hasMorningRecord && hasAfternoonRecord) {
+        setSuccessMessage('Both shifts already exist for this date!')
+        setShowSuccessAnimation(true)
+        setTimeout(() => {
+          setShowSuccessAnimation(false)
+          setSuccessMessage('')
+        }, 3000)
+        return
+      }
+
+      // Add morning shift with user's inputted times if it doesn't exist
+      if (!hasMorningRecord) {
+        const { error: morningError } = await supabase
+          .from('dtr_records')
+          .insert({
+            user_id: user.id,
+            date: selectedDate,
+            time_in: morningTimeIn,
+            time_out: morningTimeOut,
+            description: 'Morning shift',
+            shift_type: 'morning'
+          })
+
+        if (morningError) {
+          console.error('Error adding morning record:', morningError)
+          return
+        }
+      }
+
+      // Add afternoon shift with user's inputted times if it doesn't exist
+      if (!hasAfternoonRecord) {
+        const { error: afternoonError } = await supabase
+          .from('dtr_records')
+          .insert({
+            user_id: user.id,
+            date: selectedDate,
+            time_in: afternoonTimeIn,
+            time_out: afternoonTimeOut,
+            description: 'Afternoon shift',
+            shift_type: 'afternoon'
+          })
+
+        if (afternoonError) {
+          console.error('Error adding afternoon record:', afternoonError)
+          return
+        }
+      }
+
+      // Show success animation
+      setShowSuccessAnimation(true)
+      setTimeout(() => setShowSuccessAnimation(false), 3000)
+      
+      // Reset form to default values
+      setMorningTimeIn('08:00')
+      setMorningTimeOut('12:00')
+      setAfternoonTimeIn('13:00')
+      setAfternoonTimeOut('17:00')
+      
+      // Refresh data
+      fetchDTRRecords()
+      refreshUser()
+    } catch (error) {
+      console.error('Error adding both shifts:', error)
+    }
+  }
+
   const handleAddDTRRecord = async () => {
     if (!user || !selectedDate) return
 
@@ -648,6 +728,33 @@ const getRecordsForDate = (dateString: string) => {
                     </div>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+
+            {/* Add Both Shifts Button */}
+            <Card className="bg-green-50 border-green-200">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-green-900">
+                  <Calendar className="h-5 w-5" />
+                  Quick Actions
+                </CardTitle>
+                <CardDescription className="text-green-700">
+                  Add both shifts at once
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button 
+                  onClick={handleAddBothShifts} 
+                  className="w-full bg-green-600 hover:bg-green-700 text-white text-sm sm:text-base py-2 sm:py-3"
+                  disabled={!selectedDate || !morningTimeIn || !morningTimeOut || !afternoonTimeIn || !afternoonTimeOut}
+                >
+                  <Calendar className="w-4 h-4 mr-2" />
+                  <span className="hidden xs:inline">Add Both Shifts</span>
+                  <span className="xs:hidden">Add Both</span>
+                </Button>
+                <p className="text-xs text-green-600 mt-2 text-center">
+                  Uses your inputted times for both shifts
+                </p>
               </CardContent>
             </Card>
           </div>
