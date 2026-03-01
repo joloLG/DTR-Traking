@@ -3,10 +3,13 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Modal } from '@/components/ui/modal'
+import { useRateLimit } from '@/hooks/use-rate-limit'
 
 export default function RegisterPage() {
   const [formData, setFormData] = useState({
@@ -20,7 +23,9 @@ export default function RegisterPage() {
   const [error, setError] = useState('')
   const [user, setUser] = useState(null)
   const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmationModal, setShowConfirmationModal] = useState(false)
   
+  const rateLimit = useRateLimit(3, 60000) // 3 attempts per minute
   const router = useRouter()
 
   useEffect(() => {
@@ -28,6 +33,7 @@ export default function RegisterPage() {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession()
       if (session) {
+        // If user is already logged in, redirect to dashboard
         router.push('/dashboard')
       }
     }
@@ -38,7 +44,21 @@ export default function RegisterPage() {
       async (event, session) => {
         if (session) {
           if (event === 'SIGNED_IN') {
-            router.push('/dashboard')
+            // Check if this is a new registration (email confirmation)
+            // by looking at the user's created_at time
+            const userCreatedAt = new Date(session.user.created_at)
+            const now = new Date()
+            const timeDiff = now.getTime() - userCreatedAt.getTime()
+            const minutesDiff = timeDiff / (1000 * 60)
+            
+            // If account was created within the last 5 minutes, it's likely a new registration
+            if (minutesDiff < 5) {
+              // New registration - redirect to login page to show success
+              router.push('/login?message=registration_success')
+            } else {
+              // Existing user logging in - redirect to dashboard
+              router.push('/dashboard')
+            }
           }
         } else {
           setUser(null)
@@ -59,6 +79,14 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
+    // Check rate limiting
+    const { allowed, waitTime } = rateLimit.checkRateLimit()
+    if (!allowed) {
+      const waitSeconds = Math.ceil(waitTime / 1000)
+      setError(`Please wait ${waitSeconds} seconds before trying again`)
+      return
+    }
+    
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match')
       return
@@ -77,6 +105,7 @@ export default function RegisterPage() {
 
     setLoading(true)
     setError('')
+    rateLimit.recordAttempt()
 
     const { data, error } = await supabase.auth.signUp({
       email: formData.email,
@@ -84,9 +113,14 @@ export default function RegisterPage() {
     })
     
     if (error) {
-      setError(error.message || 'Registration failed')
+      if (error.message?.includes('rate limit') || error.message?.includes('429')) {
+        setError('Too many registration attempts. Please wait a few minutes before trying again.')
+      } else {
+        setError(error.message || 'Registration failed')
+      }
       setLoading(false)
     } else if (data.user) {
+      rateLimit.reset()
       // Add user profile
       const { error: profileError } = await supabase
         .from('users')
@@ -104,7 +138,8 @@ export default function RegisterPage() {
         setError(profileError.message || 'Failed to create user profile')
         setLoading(false)
       } else {
-        // Navigation will be handled by onAuthStateChange
+        // Show confirmation modal instead of redirecting
+        setShowConfirmationModal(true)
       }
     }
     
@@ -120,7 +155,7 @@ export default function RegisterPage() {
       <Card className="w-full max-w-md rounded-2xl shadow-2xl backdrop-blur-sm bg-white/95 transition-all duration-500 ease-in-out transform hover:scale-105 animate-fadeIn">
         <CardHeader className="text-center space-y-4 animate-slideDown">
           <div className="flex justify-center mb-4 animate-pulse">
-            <img src="/images/myLogo.png" alt="Logo" className="h-16 w-auto transition-transform duration-300 hover:scale-110" />
+            <Image src="/images/myLogo.png" alt="Logo" width={64} height={64} className="transition-transform duration-300 hover:scale-110" />
           </div>
           <CardTitle className="text-2xl sm:text-3xl">Register</CardTitle>
           <CardDescription>
@@ -222,7 +257,13 @@ export default function RegisterPage() {
               <div className="text-red-600 dark:text-red-400 text-sm">{error}</div>
             )}
 
-            <Button type="submit" className="w-full" disabled={loading}>
+            {rateLimit.isBlocked && (
+              <div className="text-yellow-600 dark:text-yellow-400 text-sm">
+                Rate limit active. Please wait {Math.ceil(rateLimit.waitTime / 1000)} seconds.
+              </div>
+            )}
+
+            <Button type="submit" className="w-full" disabled={loading || rateLimit.isBlocked}>
               {loading ? 'Creating account...' : 'Register'}
             </Button>
           </form>
@@ -235,6 +276,64 @@ export default function RegisterPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Confirmation Modal */}
+      <Modal
+        isOpen={showConfirmationModal}
+        onClose={() => setShowConfirmationModal(false)}
+        title="Registration Successful!"
+      >
+        <div className="space-y-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-center space-x-3">
+              <div className="shrink-0">
+                <svg className="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-sm font-medium text-blue-800">Check your email</h3>
+                <p className="text-sm text-blue-700 mt-1">
+                  We&apos;ve sent a confirmation link to <strong>{formData.email}</strong>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="text-gray-600 space-y-2">
+            <p className="text-sm">
+              To complete your registration, please:
+            </p>
+            <ol className="text-sm space-y-1 ml-4 list-decimal">
+              <li>Open your Gmail app</li>
+              <li>Find the confirmation email from us</li>
+              <li>Click the confirmation link to verify your account</li>
+            </ol>
+          </div>
+
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+            <p className="text-xs text-yellow-800">
+              <strong>Note:</strong> You won&apos;t be able to log in until you confirm your email address.
+            </p>
+          </div>
+
+          <div className="flex space-x-3 pt-2">
+            <Button
+              onClick={() => setShowConfirmationModal(false)}
+              className="flex-1"
+            >
+              I Understand
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => window.open('https://gmail.com', '_blank')}
+              className="flex-1"
+            >
+              Open Gmail
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

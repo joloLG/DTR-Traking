@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, useLayoutEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,6 +18,22 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   
   const router = useRouter()
+  const searchParams = useSearchParams()
+
+  // Initialize success message from URL params
+  const initialSuccessMessage = searchParams.get('message') === 'registration_success' 
+    ? 'Registration successful! You can now log in with your credentials.'
+    : ''
+  const [successMessage] = useState(initialSuccessMessage)
+
+  // Clear URL parameter after reading
+  useLayoutEffect(() => {
+    if (initialSuccessMessage) {
+      const newUrl = new URL(window.location.href)
+      newUrl.searchParams.delete('message')
+      window.history.replaceState({}, '', newUrl.toString())
+    }
+  }, [initialSuccessMessage])
 
   useEffect(() => {
     // Check if user is already logged in
@@ -79,7 +96,7 @@ export default function LoginPage() {
       <Card className="w-full max-w-md rounded-2xl shadow-2xl backdrop-blur-sm bg-white/95 transition-all duration-500 ease-in-out transform hover:scale-105 animate-fadeIn">
         <CardHeader className="text-center space-y-4 animate-slideDown">
           <div className="flex justify-center mb-4 animate-pulse">
-            <img src="/images/myLogo.png" alt="Logo" className="h-16 w-auto transition-transform duration-300 hover:scale-110" />
+            <Image src="/images/myLogo.png" alt="Logo" width={64} height={64} className="transition-transform duration-300 hover:scale-110" />
           </div>
           <CardTitle className="text-2xl sm:text-3xl">Login</CardTitle>
           <CardDescription>
@@ -129,6 +146,22 @@ export default function LoginPage() {
               </label>
             </div>
 
+            {successMessage && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+                <div className="flex items-center space-x-3">
+                  <div className="shrink-0">
+                    <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-sm font-medium text-green-800">Registration Successful!</h3>
+                    <p className="text-sm text-green-700 mt-1">{successMessage}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {error && (
               <div className="text-red-600 dark:text-red-400 text-sm">{error}</div>
             )}
@@ -139,7 +172,7 @@ export default function LoginPage() {
           </form>
 
           <div className="mt-4 text-center text-sm">
-            Don't have an account?{' '}
+            Don&apos;t have an account?{' '}
             <Link href="/register" className="text-blue-600 dark:text-blue-400 hover:underline">
               Register here
             </Link>
