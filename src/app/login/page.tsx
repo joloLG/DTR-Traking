@@ -123,7 +123,7 @@ function LoginPageContent() {
         </div>
       </div>
       
-      <Card className="w-full max-w-md rounded-2xl shadow-2xl backdrop-blur-sm bg-white/95 transition-all duration-500 ease-in-out transform hover:scale-105 animate-fadeIn relative z-10">
+      <Card className="w-full max-w-md rounded-2xl shadow-2xl backdrop-blur-sm bg-white/70 transition-all duration-500 ease-in-out transform hover:scale-105 animate-fadeIn relative z-10">
         <CardHeader className="text-center space-y-4 animate-slideDown">
           <div className="flex justify-center mb-4 animate-pulse">
             <Image src="/images/myLogo.png" alt="Logo" width={64} height={64} className="transition-transform duration-300 hover:scale-110" />
