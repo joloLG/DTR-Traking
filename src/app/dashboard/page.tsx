@@ -9,7 +9,8 @@ import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Edit2, Save, LogOut, Calendar, TrendingUp, CheckCircle, Globe } from 'lucide-react'
+import { Edit2, Save, Calendar, TrendingUp, CheckCircle, Globe } from 'lucide-react'
+import { DashboardLayout } from '@/components/dashboard-layout'
 
 // Helper function to format date in local timezone (YYYY-MM-DD)
 const formatDateToLocal = (date: Date) => {
@@ -68,18 +69,19 @@ export default function DashboardPage() {
     const today = formatDateToLocal(new Date())
     
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('dtr_records')
         .select('*')
         .eq('user_id', user.id)
         .eq('date', today)
-        .single()
+        .maybeSingle()
 
       if (data && !data.time_out) {
         // Description is no longer used, so we don't need to set it
       }
     } catch (error) {
-      console.error('Error checking today status:', error)
+      // This is expected when no record exists for today
+      console.log('No DTR record found for today')
     }
   }, [user])
 
@@ -520,7 +522,7 @@ const getRecordsForDate = (dateString: string) => {
         <div className="relative z-10">
           <div className="bg-white/70 backdrop-blur-sm rounded-2xl p-8 shadow-2xl text-center max-w-sm mx-auto">
             <div className="flex justify-center mb-4">
-              <Image src="/images/myLogo.png" alt="Logo" width={64} height={64} className="animate-pulse" />
+              <Image src="/images/myLogo.png" alt="Logo" width={64} height={64} className="animate-pulse" style={{ width: 'auto', height: 'auto' }} />
             </div>
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600 mx-auto mb-4"></div>
             <p className="text-gray-700 font-medium">Loading dashboard...</p>
@@ -536,44 +538,7 @@ const getRecordsForDate = (dateString: string) => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Fixed Header Navigation */}
-      <header className="fixed top-0 left-0 right-0 bg-[#800000] text-white shadow-sm border-b z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            {/* Left Side - Welcome Message */}
-            <div className="shrink-0">
-              <h1 className="text-lg sm:text-xl lg:text-2xl font-bold text-white">
-                <span className="hidden sm:inline">Welcome to JLG Dev Solutions</span>
-                <span className="sm:hidden">JLG Dev Solutions</span>
-              </h1>
-              <p className="text-xs sm:text-sm text-gray-200">
-                <span className="hidden sm:inline">DTR Tracker System</span>
-                <span className="sm:hidden">DTR System</span>
-              </p>
-            </div>
-            
-            {/* Right Side - Logout Button Only */}
-            <div className="flex items-center">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowLogoutConfirm(true)}
-                disabled={loading}
-                className="flex items-center gap-2 text-white hover:bg-red-900 text-xs sm:text-sm disabled:opacity-50"
-              >
-                <LogOut className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                <span className="hidden xs:inline">{loading ? 'Logging out...' : 'Logout'}</span>
-                <span className="xs:hidden">{loading ? '...' : 'Out'}</span>
-              </Button>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content with padding for fixed header */}
-      <main className="pt-16 pb-16">
-
+    <DashboardLayout>
       <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-6 lg:py-8">
         {/* Progress Metrics */}
         <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6 mb-4 sm:mb-6 lg:mb-8">
@@ -982,8 +947,6 @@ const getRecordsForDate = (dateString: string) => {
           </div>
         </div>
       </div>
-      </main>
-
       {/* Fixed Bottom Navigation */}
       <footer className="fixed bottom-0 left-0 right-0 bg-[#800000] text-white z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -1038,6 +1001,6 @@ const getRecordsForDate = (dateString: string) => {
           </div>
         </div>
       )}
-    </div>
+    </DashboardLayout>
   )
 }

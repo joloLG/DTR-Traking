@@ -23,6 +23,7 @@ export interface UserData {
   full_name: string
   password: string
   ojt_hours_required: number
+  role?: 'admin' | 'user'
 }
 
 export interface CreateUserResult {

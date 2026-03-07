@@ -138,6 +138,19 @@ export function useAuth() {
           }
           
           setUser(data)
+          
+          // Route based on user role
+          if (data.role === 'admin') {
+            // Only redirect to admin dashboard if not already there
+            if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/admin')) {
+              router.push('/admin/dashboard')
+            }
+          } else {
+            // Only redirect to user dashboard if not already there or on narrative-reports
+            if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/dashboard') && window.location.pathname !== '/' && !window.location.pathname.startsWith('/narrative-reports')) {
+              router.push('/dashboard')
+            }
+          }
         } else {
           setUser(null)
           router.push('/login')
