@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Edit2, Save, Calendar, TrendingUp, CheckCircle, Globe } from 'lucide-react'
 import { DashboardLayout } from '@/components/dashboard-layout'
+import { CongratulationsModal } from '@/components/congratulations-modal'
 
 // Helper function to format date in local timezone (YYYY-MM-DD)
 const formatDateToLocal = (date: Date) => {
@@ -34,6 +35,8 @@ export default function DashboardPage() {
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
+  const [showCongratulations, setShowCongratulations] = useState(false)
+  const [congratulationsShown, setCongratulationsShown] = useState(false)
 
   // Initialize target hours from user data
   const targetHoursValue = user ? user.ojt_hours_required || 0 : 0
@@ -69,7 +72,7 @@ export default function DashboardPage() {
     const today = formatDateToLocal(new Date())
     
     try {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('dtr_records')
         .select('*')
         .eq('user_id', user.id)
@@ -79,7 +82,7 @@ export default function DashboardPage() {
       if (data && !data.time_out) {
         // Description is no longer used, so we don't need to set it
       }
-    } catch (error) {
+    } catch {
       // This is expected when no record exists for today
       console.log('No DTR record found for today')
     }
@@ -102,6 +105,35 @@ export default function DashboardPage() {
       fetchData()
     }
   }, [user, fetchDTRRecords, checkTodayStatus])
+
+  // Check for OJT completion and show congratulations
+  useEffect(() => {
+    if (user && !congratulationsShown) {
+      const hasCompletedOJT = user.ojt_hours_completed >= user.ojt_hours_required && user.ojt_hours_required > 0
+      
+      if (hasCompletedOJT) {
+        // Use setTimeout to avoid synchronous setState in effect
+        setTimeout(() => {
+          setShowCongratulations(true)
+          setCongratulationsShown(true)
+          
+          // Store in localStorage to prevent showing again in this session
+          localStorage.setItem(`congratulations_shown_${user.id}`, 'true')
+        }, 0)
+      }
+    }
+  }, [user, congratulationsShown])
+
+  // Check localStorage on mount to see if congratulations was already shown
+  useEffect(() => {
+    if (user) {
+      const shown = localStorage.getItem(`congratulations_shown_${user.id}`)
+      if (shown === 'true') {
+        // Use setTimeout to avoid synchronous setState in effect
+        setTimeout(() => setCongratulationsShown(true), 0)
+      }
+    }
+  }, [user])
 
   const calculateProgress = () => {
     if (!user) return 0
@@ -345,91 +377,10 @@ export default function DashboardPage() {
     }
   }
 
-  const handleAddDTRRecord = async () => {
-    if (!user || !selectedDate) return
-
-    try {
-      // Check if records already exist for this date
-      const { data: existingRecords } = await supabase
-        .from('dtr_records')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('date', selectedDate)
-
-      const hasMorningRecord = existingRecords?.some(record => record.shift_type === 'morning')
-      const hasAfternoonRecord = existingRecords?.some(record => record.shift_type === 'afternoon')
-
-      // Add morning record if both times are provided and no morning record exists
-      if (morningTimeIn && morningTimeOut && !hasMorningRecord) {
-        const { error: morningError } = await supabase
-          .from('dtr_records')
-          .insert({
-            user_id: user.id,
-            date: selectedDate,
-            time_in: morningTimeIn,
-            time_out: morningTimeOut,
-            description: 'Morning shift',
-            shift_type: 'morning'
-          })
-
-        if (morningError) {
-          console.error('Error adding morning record:', morningError)
-          return
-        }
-      }
-
-      // Add afternoon record if both times are provided and no afternoon record exists
-      if (afternoonTimeIn && afternoonTimeOut && !hasAfternoonRecord) {
-        const { error: afternoonError } = await supabase
-          .from('dtr_records')
-          .insert({
-            user_id: user.id,
-            date: selectedDate,
-            time_in: afternoonTimeIn,
-            time_out: afternoonTimeOut,
-            description: 'Afternoon shift',
-            shift_type: 'afternoon'
-          })
-
-        if (afternoonError) {
-          console.error('Error adding afternoon record:', afternoonError)
-          return
-        }
-      }
-
-      // Show success animation only if at least one record was added
-      if ((morningTimeIn && morningTimeOut && !hasMorningRecord) || 
-          (afternoonTimeIn && afternoonTimeOut && !hasAfternoonRecord)) {
-        setShowSuccessAnimation(true)
-        setTimeout(() => setShowSuccessAnimation(false), 3000)
-        
-        // Reset form to default values
-        setMorningTimeIn('08:00')
-        setMorningTimeOut('12:00')
-        setAfternoonTimeIn('13:00')
-        setAfternoonTimeOut('17:00')
-        
-        // Refresh data
-        fetchDTRRecords()
-        refreshUser()
-      } else {
-        // Show warning if trying to add duplicate records
-        setSuccessMessage('One or both shifts already exist for this date!')
-        setShowSuccessAnimation(true)
-        setTimeout(() => {
-          setShowSuccessAnimation(false)
-          setSuccessMessage('')
-        }, 3000)
-      }
-    } catch (error) {
-      console.error('Error adding DTR record:', error)
-    }
-  }
 
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear()
     const month = date.getMonth()
-    const firstDay = new Date(year, month, 1)
     const lastDay = new Date(year, month + 1, 0)
     return lastDay.getDate()
   }
@@ -947,6 +898,16 @@ const getRecordsForDate = (dateString: string) => {
           </div>
         </div>
       </div>
+
+      {/* Congratulations Modal */}
+      <CongratulationsModal
+        isOpen={showCongratulations}
+        onClose={() => setShowCongratulations(false)}
+        fullName={user?.full_name || ''}
+        ojtHoursRequired={user?.ojt_hours_required || 0}
+        ojtHoursCompleted={user?.ojt_hours_completed || 0}
+      />
+
       {/* Fixed Bottom Navigation */}
       <footer className="fixed bottom-0 left-0 right-0 bg-[#800000] text-white z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
